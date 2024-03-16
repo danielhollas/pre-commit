@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import logging
 import os
 import sys
 from collections.abc import Generator
@@ -22,6 +23,7 @@ from pre_commit.util import win_exe
 
 ENVIRONMENT_DIR = 'py_env'
 run_hook = lang_base.basic_run_hook
+logger = logging.getLogger('pre_commit')
 
 
 @functools.cache
@@ -163,7 +165,7 @@ def is_version_acceptable(version: str, expected: str) -> bool:
         return True
 
     # See https://github.com/astral-sh/uv/issues/1689
-    if version.startswith(expected + "."):
+    if version.startswith(expected + '.'):
         return True
 
     return False
@@ -215,10 +217,12 @@ def install_environment(
 ) -> None:
     envdir = lang_base.environment_dir(prefix, ENVIRONMENT_DIR, version)
     python = norm_version(version)
+    venv_cmd = [sys.executable, '-mvirtualenv', envdir]
+    install_cmd = ('python', '-mpip', 'install', '.', *additional_dependencies)
+
     if os.environ.get('PRE_COMMIT_USE_UV'):
+        logger.info('Using uv installer')
         venv_cmd = ['uv', 'venv', envdir]
-        if python is not None:
-            venv_cmd.extend(('-p', python))
         install_cmd = (
             'uv',
             'pip',
@@ -229,11 +233,9 @@ def install_environment(
             '-e', '.',
             *additional_dependencies,
         )
-    else:
-        venv_cmd = [sys.executable, '-mvirtualenv', envdir]
-        if python is not None:
-            venv_cmd.extend(('-p', python))
-        install_cmd = ('python', '-mpip', 'install', '.', *additional_dependencies)
+
+    if python is not None:
+        venv_cmd.extend(('-p', python))
 
     cmd_output_b(*venv_cmd, cwd='/')
     with in_env(prefix, version):
