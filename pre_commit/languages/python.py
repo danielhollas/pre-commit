@@ -163,11 +163,9 @@ def in_env(prefix: Prefix, version: str) -> Generator[None, None, None]:
 def is_version_acceptable(version: str, expected: str) -> bool:
     if version == expected:
         return True
-
     # See https://github.com/astral-sh/uv/issues/1689
     if version.startswith(expected + '.'):
         return True
-
     return False
 
 
@@ -223,16 +221,7 @@ def install_environment(
     if os.environ.get('PRE_COMMIT_USE_UV'):
         logger.info('Using uv installer')
         venv_cmd = ['uv', 'venv', envdir]
-        install_cmd = (
-            'uv',
-            'pip',
-            'install',
-            # For the time being, we need to install as `-e`ditable with `uv`;
-            # see https://github.com/astral-sh/uv/issues/313 for more details.
-            # TODO: un-editable when astral-sh/uv#313 is fixed.
-            '-e', '.',
-            *additional_dependencies,
-        )
+        install_cmd = ('uv', 'pip', 'install', '.', *additional_dependencies)
 
     if python is not None:
         venv_cmd.extend(('-p', python))
