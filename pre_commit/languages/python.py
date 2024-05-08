@@ -164,7 +164,8 @@ def is_version_acceptable(version: str, expected: str) -> bool:
     if version == expected:
         return True
     # See https://github.com/astral-sh/uv/issues/1689
-    if version.startswith(expected + '.'):
+    # TODO: This is probably not robust at all!
+    if version.startswith(f'{expected}.'):
         return True
     return False
 
