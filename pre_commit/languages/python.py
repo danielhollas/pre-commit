@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import logging
 import os
 import sys
 from collections.abc import Generator
@@ -22,6 +23,7 @@ from pre_commit.util import win_exe
 
 ENVIRONMENT_DIR = 'py_env'
 run_hook = lang_base.basic_run_hook
+logger = logging.getLogger('pre_commit')
 
 
 @functools.cache
@@ -158,6 +160,16 @@ def in_env(prefix: Prefix, version: str) -> Generator[None, None, None]:
         yield
 
 
+def is_version_acceptable(version: str, expected: str) -> bool:
+    if version == expected:
+        return True
+    # See https://github.com/astral-sh/uv/issues/1689
+    # TODO: This is probably not robust at all!
+    if version.startswith(f'{expected}.'):
+        return True
+    return False
+
+
 def health_check(prefix: Prefix, version: str) -> str | None:
     envdir = lang_base.environment_dir(prefix, ENVIRONMENT_DIR, version)
     pyvenv_cfg = os.path.join(envdir, 'pyvenv.cfg')
@@ -175,7 +187,7 @@ def health_check(prefix: Prefix, version: str) -> str | None:
 
     # always use uncached lookup here in case we replaced an unhealthy env
     virtualenv_version = _version_info.__wrapped__(py_exe)
-    if virtualenv_version != cfg['version_info']:
+    if not is_version_acceptable(virtualenv_version, cfg['version_info']):
         return (
             f'virtualenv python version did not match created version:\n'
             f'- actual version: {virtualenv_version}\n'
@@ -187,7 +199,7 @@ def health_check(prefix: Prefix, version: str) -> str | None:
         return None
 
     base_exe_version = _version_info(cfg['base-executable'])
-    if base_exe_version != cfg['version_info']:
+    if not is_version_acceptable(base_exe_version, cfg['version_info']):
         return (
             f'base executable python version does not match created version:\n'
             f'- base-executable version: {base_exe_version}\n'
@@ -203,11 +215,17 @@ def install_environment(
         additional_dependencies: Sequence[str],
 ) -> None:
     envdir = lang_base.environment_dir(prefix, ENVIRONMENT_DIR, version)
-    venv_cmd = [sys.executable, '-mvirtualenv', envdir]
     python = norm_version(version)
+    venv_cmd = [sys.executable, '-mvirtualenv', envdir]
+    install_cmd = ('python', '-mpip', 'install', '.', *additional_dependencies)
+
+    if os.environ.get('PRE_COMMIT_USE_UV'):
+        logger.info('Using uv installer')
+        venv_cmd = ['uv', 'venv', envdir]
+        install_cmd = ('uv', 'pip', 'install', '.', *additional_dependencies)
+
     if python is not None:
         venv_cmd.extend(('-p', python))
-    install_cmd = ('python', '-mpip', 'install', '.', *additional_dependencies)
 
     cmd_output_b(*venv_cmd, cwd='/')
     with in_env(prefix, version):
